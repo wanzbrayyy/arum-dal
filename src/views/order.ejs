@@ -3,426 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Warkop Arum Dalu - Pemesanan</title>
+    <meta name="theme-color" content="<%= theme.background %>">
+    <title><%= outletName %> - Menu Digital</title>
+    <link rel="manifest" href="/manifest.webmanifest">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --bg-dark: #1e293b;
-            --bg-card: #334155;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent: #f59e0b;
-            --success: #22c55e;
-            --border: #475569;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        body {
-            background-color: var(--bg-dark);
-            color: var(--text-main);
-            padding-bottom: 90px;
-        }
-
-        .app-container {
-            max-width: 480px;
-            margin: 0 auto;
-            min-height: 100vh;
-            background-color: var(--bg-dark);
-            position: relative;
-        }
-
-        header {
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border);
-            position: sticky;
-            top: 0;
-            background-color: rgba(30, 41, 59, 0.95);
-            backdrop-filter: blur(5px);
-            z-index: 10;
-        }
-
-        .brand h1 {
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-        }
-
-        .brand p {
-            font-size: 12px;
-            color: var(--text-muted);
-        }
-
-        .table-badge {
-            background-color: rgba(245, 158, 11, 0.2);
-            color: var(--accent);
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .customer-section {
-            padding: 20px;
-        }
-
-        .input-group {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .input-group i {
-            position: absolute;
-            left: 15px;
-            color: var(--text-muted);
-        }
-
-        .input-group input {
-            width: 100%;
-            background-color: var(--bg-card);
-            border: 1px solid var(--border);
-            color: var(--text-main);
-            padding: 14px 14px 14px 45px;
-            border-radius: 12px;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.3s;
-        }
-
-        .input-group input:focus {
-            border-color: var(--accent);
-        }
-
-        .menu-section {
-            padding: 0 20px 20px;
-        }
-
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .product-card {
-            background-color: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 15px;
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .product-info {
-            flex: 1;
-        }
-
-        .product-title {
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .product-category {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .product-price {
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
-        .qty-controls {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background-color: var(--bg-dark);
-            padding: 6px;
-            border-radius: 30px;
-        }
-
-        .qty-btn {
-            background-color: var(--bg-card);
-            color: var(--text-main);
-            border: none;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .qty-btn:active {
-            transform: scale(0.9);
-            background-color: var(--border);
-        }
-
-        .qty-value {
-            font-size: 14px;
-            font-weight: 600;
-            width: 16px;
-            text-align: center;
-        }
-
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            padding: 15px 20px;
-            background: linear-gradient(to top, var(--bg-dark) 80%, transparent);
-            z-index: 20;
-        }
-
-        .cart-bar {
-            width: 100%;
-            max-width: 440px;
-            background-color: var(--accent);
-            border-radius: 16px;
-            padding: 12px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 10px 25px rgba(245, 158, 11, 0.3);
-            opacity: 0.5;
-            pointer-events: none;
-            transition: all 0.3s;
-        }
-
-        .cart-bar.active {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .cart-info {
-            color: #fff;
-        }
-
-        .cart-items {
-            font-size: 12px;
-            opacity: 0.9;
-            margin-bottom: 2px;
-        }
-
-        .cart-total {
-            font-size: 16px;
-            font-weight: 700;
-        }
-
-        .checkout-btn {
-            background-color: #fff;
-            color: var(--accent);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .checkout-btn:active {
-            transform: scale(0.98);
-        }
-        
-        .empty-menu {
-            text-align: center;
-            color: var(--text-muted);
-            padding: 40px 0;
-            font-size: 14px;
-        }
-    </style>
+    <link rel="stylesheet" href="/css/client-app.css">
 </head>
 <body>
-    <div class="app-container">
-        <header>
-            <div class="brand">
-                <h1>ARUM DALU</h1>
-                <p>POS System</p>
-            </div>
-            <div class="table-badge">
-                <i class="fa-solid fa-utensils"></i>
-                <%= table.name %>
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="topbar-inner">
+                <div class="topbar-meta">
+                    <div>
+                        <div class="brand-title">ARUM DALU</div>
+                        <div class="brand-subtitle">Digital Menu & Table Ordering</div>
+                    </div>
+                    <div class="table-pill" id="tableBadge"><%= tableName %></div>
+                </div>
+                <div class="toolbar">
+                    <button class="icon-btn" id="themeToggle" type="button"><i class="fa-solid fa-circle-half-stroke"></i></button>
+                    <button class="icon-btn" id="languageToggle" type="button"><i class="fa-solid fa-language"></i></button>
+                    <button class="soft-pill" id="installBtn" type="button">PWA</button>
+                </div>
             </div>
         </header>
 
-        <section class="customer-section">
-            <div class="input-group">
-                <i class="fa-regular fa-user"></i>
-                <input type="text" id="customerName" placeholder="Nama Pemesan (Opsional)" autocomplete="off">
-            </div>
-        </section>
-
-        <section class="menu-section">
-            <h2 class="section-title"><i class="fa-solid fa-mug-hot" style="color: var(--accent);"></i> Menu Tersedia</h2>
-            
-            <% if (products.length === 0) { %>
-                <div class="empty-menu">
-                    <i class="fa-solid fa-box-open fa-3x" style="margin-bottom: 10px; opacity: 0.5;"></i>
-                    <p>Mohon maaf, menu sedang kosong.</p>
-                </div>
-            <% } else { %>
-                <% products.forEach(function(product) { %>
-                    <div class="product-card">
-                        <div class="product-info">
-                            <h3 class="product-title"><%= product.name %></h3>
-                            <div class="product-category">
-                                <% if(product.category === 'Kopi') { %><i class="fa-solid fa-mug-saucer"></i>
-                                <% } else if(product.category === 'Makanan') { %><i class="fa-solid fa-burger"></i>
-                                <% } else if(product.category === 'Minuman') { %><i class="fa-solid fa-glass-water"></i>
-                                <% } else { %><i class="fa-solid fa-star"></i><% } %>
-                                <%= product.category %>
-                            </div>
-                            <div class="product-price">Rp <%= product.price.toLocaleString('id-ID') %></div>
+        <main>
+            <section class="page-section">
+                <div class="hero-card">
+                    <div class="soft-pill">Scan QR • Order dari meja</div>
+                    <h1 id="heroTitle"><%= outletName %></h1>
+                    <p id="heroSubtitle">Menu digital untuk pelanggan Arum Dalu.</p>
+                    <div class="hero-grid">
+                        <div class="mini-stat">
+                            <div class="mini-stat-label">Outlet</div>
+                            <div class="mini-stat-value" id="miniOutlet"><%= outletName %></div>
                         </div>
-                        <div class="qty-controls">
-                            <button class="qty-btn" onclick="updateItem('<%= product._id %>', -1, <%= product.price %>)">
-                                <i class="fa-solid fa-minus"></i>
-                            </button>
-                            <span class="qty-value" id="qty-<%= product._id %>">0</span>
-                            <button class="qty-btn" onclick="updateItem('<%= product._id %>', 1, <%= product.price %>)">
-                                <i class="fa-solid fa-plus"></i>
-                            </button>
+                        <div class="mini-stat">
+                            <div class="mini-stat-label">Meja</div>
+                            <div class="mini-stat-value" id="miniTable"><%= tableName %></div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-label">Pajak</div>
+                            <div class="mini-stat-value" id="miniTax">10%</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-label">Service</div>
+                            <div class="mini-stat-value" id="miniService">5%</div>
                         </div>
                     </div>
-                <% }); %>
-            <% } %>
-        </section>
-
-        <div class="bottom-nav">
-            <div class="cart-bar" id="cartBar">
-                <div class="cart-info">
-                    <div class="cart-items"><span id="totalItems">0</span> Items</div>
-                    <div class="cart-total" id="totalPrice">Rp 0</div>
                 </div>
-                <button class="checkout-btn" id="btnCheckout" onclick="processOrder()">
-                    Pesan <i class="fa-solid fa-arrow-right"></i>
-                </button>
+            </section>
+
+            <section class="page-section">
+                <div class="section-heading">
+                    <h2>Identitas Pemesan</h2>
+                    <span class="muted">Opsional, tapi membantu kasir</span>
+                </div>
+                <div class="info-grid">
+                    <input class="field" id="customerName" placeholder="Nama pelanggan">
+                    <input class="field" id="customerPhone" placeholder="Nomor WhatsApp">
+                    <select class="select-box" id="diningOption">
+                        <option value="dine-in">Dine In</option>
+                        <option value="takeaway">Take Away</option>
+                    </select>
+                    <select class="select-box" id="paymentPreference">
+                        <option value="pay_at_cashier">Bayar di kasir</option>
+                        <option value="pay_at_table">Bayar dari meja</option>
+                        <option value="qris">QRIS</option>
+                    </select>
+                    <input class="field" id="voucherCode" placeholder="Kode voucher">
+                    <input class="field" id="takeawayAddress" placeholder="Alamat takeaway / catatan antar">
+                </div>
+                <div class="card hidden" id="memberCard">
+                    <div class="section-heading">
+                        <h2>Info Member</h2>
+                        <span class="soft-pill" id="memberTierBadge">Bronze</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="muted">Nama</span>
+                        <strong id="memberNameValue">-</strong>
+                    </div>
+                    <div class="status-row" style="margin-top:8px;">
+                        <span class="muted">Poin</span>
+                        <strong id="memberPointsValue">0</strong>
+                    </div>
+                    <div class="status-row" style="margin-top:8px;">
+                        <span class="muted">Kode</span>
+                        <strong id="memberCodeValue">-</strong>
+                    </div>
+                </div>
+                <div class="promo-strip" id="promoRow"></div>
+                <div class="info-grid" style="margin-top:12px;">
+                    <div class="card quick-card">
+                        <div class="muted">Metode Bayar</div>
+                        <strong id="paymentPreferenceLabel">Bayar di kasir</strong>
+                    </div>
+                    <div class="card quick-card">
+                        <div class="muted">Mode Pesanan</div>
+                        <strong id="diningOptionLabel">Dine In</strong>
+                    </div>
+                </div>
+                <textarea class="field" id="orderNote" placeholder="Catatan order, request khusus, atau patokan level rasa" style="margin-top:10px; min-height:92px; resize:vertical;"></textarea>
+            </section>
+
+            <section class="page-section">
+                <div class="section-heading">
+                    <h2>Aksi Cepat Pelayanan</h2>
+                    <span class="muted">Terhubung ke dashboard kasir</span>
+                </div>
+                <div class="action-grid" id="serviceActionRow">
+                    <button class="action-chip" type="button" data-type="Panggil pelayan">Panggil pelayan</button>
+                    <button class="action-chip" type="button" data-type="Minta tagihan">Minta tagihan</button>
+                    <button class="action-chip" type="button" data-type="Bersihkan meja">Bersihkan meja</button>
+                </div>
+            </section>
+
+            <section class="page-section">
+                <div class="section-heading">
+                    <h2>Rekomendasi & Promo</h2>
+                    <span class="muted">Upsell otomatis dari katalog</span>
+                </div>
+                <div class="recommendation-row" id="recommendationRow"></div>
+            </section>
+
+            <section class="page-section">
+                <div class="section-heading">
+                    <h2>Menu</h2>
+                    <span class="muted">Pilih, custom, lalu kirim ke kasir</span>
+                </div>
+                <input class="search-box" id="searchInput" placeholder="Cari menu, barcode, atau kategori">
+                <div class="category-row" id="categoryRow" style="margin-top:12px;"></div>
+                <div class="product-list" id="productList" style="margin-top:14px;"></div>
+                <div class="empty-state hidden" id="emptyProducts">Menu tidak ditemukan untuk filter saat ini.</div>
+            </section>
+
+            <section class="page-section">
+                <div class="status-card hidden" id="statusCard">
+                    <div class="section-heading">
+                        <h2>Status Pesanan Terakhir</h2>
+                        <span class="status-badge" id="statusBadge">PENDING</span>
+                    </div>
+                    <div class="muted" id="statusText">Pesanan menunggu diproses.</div>
+                    <div class="soft-pill" style="margin-top:12px;" id="latestOrderMeta">Belum ada order aktif</div>
+                    <div class="status-row" style="margin-top:12px;">
+                        <span class="muted">Nomor order</span>
+                        <strong id="statusOrderCode">-</strong>
+                    </div>
+                    <div class="status-row" style="margin-top:8px;">
+                        <span class="muted">Queue / Pembayaran</span>
+                        <strong id="statusQueueInfo">-</strong>
+                    </div>
+                    <div class="action-grid" style="margin-top:14px;">
+                        <button class="action-chip" id="refreshStatusBtn" type="button">Refresh status</button>
+                        <button class="action-chip" id="shareOrderBtn" type="button">Bagikan order</button>
+                    </div>
+                    <button class="secondary-btn" id="feedbackBtn" type="button" style="margin-top:14px;">Kirim feedback cepat</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div class="floating-cart">
+        <div class="cart-sheet">
+            <div class="cart-header">
+                <div>
+                    <div style="font-weight:700;">Keranjang</div>
+                    <div class="muted" id="cartMeta">Belum ada item di keranjang.</div>
+                </div>
+                <div class="soft-pill" id="cartCount">0 item</div>
             </div>
+            <div class="empty-state" id="cartEmpty">Belum ada item di keranjang.</div>
+            <div id="cartLines"></div>
+            <div class="cart-summary">
+                <div class="cart-summary-row"><span class="muted">Subtotal</span><strong id="subtotalValue">Rp 0</strong></div>
+                <div class="cart-summary-row" style="margin-top:8px;"><span class="muted">Diskon</span><strong id="discountValue">Rp 0</strong></div>
+                <div class="cart-summary-row" style="margin-top:8px;"><span class="muted">Service</span><strong id="serviceValue">Rp 0</strong></div>
+                <div class="cart-summary-row" style="margin-top:8px;"><span class="muted">Pajak</span><strong id="taxValue">Rp 0</strong></div>
+                <div class="cart-summary-row" style="margin-top:8px;"><span class="muted">Pembulatan</span><strong id="roundingValue">Rp 0</strong></div>
+                <div class="cart-summary-row" style="margin-top:10px; font-size:18px;"><span>Total</span><strong id="totalValue">Rp 0</strong></div>
+            </div>
+            <button class="primary-btn" id="checkoutBtn" type="button">Kirim Pesanan</button>
         </div>
     </div>
 
-    <input type="hidden" id="tableId" value="<%= table._id %>">
-
     <script>
-        const cart = {};
-
-        function updateItem(id, change, price) {
-            if (!cart[id]) {
-                cart[id] = { qty: 0, price: price };
-            }
-
-            cart[id].qty += change;
-
-            if (cart[id].qty <= 0) {
-                delete cart[id];
-                document.getElementById(`qty-${id}`).innerText = '0';
-            } else {
-                document.getElementById(`qty-${id}`).innerText = cart[id].qty;
-            }
-
-            calculateTotal();
-        }
-
-        function calculateTotal() {
-            let itemsCount = 0;
-            let totalAmount = 0;
-
-            for (const key in cart) {
-                itemsCount += cart[key].qty;
-                totalAmount += (cart[key].price * cart[key].qty);
-            }
-
-            document.getElementById('totalItems').innerText = itemsCount;
-            document.getElementById('totalPrice').innerText = `Rp ${totalAmount.toLocaleString('id-ID')}`;
-
-            const cartBar = document.getElementById('cartBar');
-            if (itemsCount > 0) {
-                cartBar.classList.add('active');
-            } else {
-                cartBar.classList.remove('active');
-            }
-        }
-
-        async function processOrder() {
-            const tableId = document.getElementById('tableId').value;
-            const customerNameInput = document.getElementById('customerName').value.trim();
-            const customerName = customerNameInput !== '' ? customerNameInput : 'Customer';
-            const btn = document.getElementById('btnCheckout');
-
-            const orderItems = [];
-            for (const key in cart) {
-                orderItems.push({
-                    product: key,
-                    quantity: cart[key].qty,
-                    priceAtOrder: cart[key].price
-                });
-            }
-
-            if (orderItems.length === 0) return;
-
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            btn.disabled = true;
-
-            const payload = {
-                tableId,
-                customerName,
-                items: orderItems
-            };
-
-            try {
-                const res = await fetch('/api/orders', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (res.ok) {
-                    window.location.replace('/success');
-                } else {
-                    const error = await res.json();
-                    alert(error.msg || 'Gagal membuat pesanan');
-                    btn.innerHTML = 'Pesan <i class="fa-solid fa-arrow-right"></i>';
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                alert('Terjadi kesalahan jaringan');
-                btn.innerHTML = 'Pesan <i class="fa-solid fa-arrow-right"></i>';
-                btn.disabled = false;
-            }
+        window.CLIENT_CONTEXT = {
+            uniqueIdentifier: '<%= uniqueIdentifier %>'
+        };
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
         }
     </script>
+    <script src="/js/client-app.js"></script>
 </body>
 </html>

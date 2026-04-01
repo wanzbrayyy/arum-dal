@@ -1,0 +1,16 @@
+{
+  "name": "Arum Dalu Menu",
+  "short_name": "Arum Menu",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1F2D3D",
+  "theme_color": "#1F2D3D",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
