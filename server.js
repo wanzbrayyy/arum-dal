@@ -5,7 +5,6 @@ const path = require('path');
 const connectDB = require('./src/config/db');
 const seedInitialData = require('./src/config/seed');
 
-// Import Routes
 const authRoutes = require('./src/routes/authRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const tableRoutes = require('./src/routes/tableRoutes');
@@ -13,12 +12,25 @@ const orderRoutes = require('./src/routes/orderRoutes');
 const shiftRoutes = require('./src/routes/shiftRoutes');
 const expenseRoutes = require('./src/routes/expenseRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
-const clientRoutes = require('./src/routes/clientRoutes'); // ROUTE BARU UNTUK EJS
+const clientRoutes = require('./src/routes/clientRoutes');
 const clientApiRoutes = require('./src/routes/clientApiRoutes');
 const cashierAppRoutes = require('./src/routes/cashierAppRoutes');
 const adminAppRoutes = require('./src/routes/adminAppRoutes');
 
 const app = express();
+const PORT = process.env.PORT || 5000;
+
+let bootstrapPromise;
+
+function ensureBootstrap() {
+  if (!bootstrapPromise) {
+    bootstrapPromise = (async () => {
+      await connectDB();
+      await seedInitialData();
+    })();
+  }
+  return bootstrapPromise;
+}
 
 app.use(cors());
 app.use(express.json());
@@ -26,6 +38,16 @@ app.use(express.urlencoded({ extended: true }));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'src', 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(async (_req, _res, next) => {
+  try {
+    await ensureBootstrap();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/tables', tableRoutes);
@@ -38,16 +60,20 @@ app.use('/api/app/cashier', cashierAppRoutes);
 app.use('/api/app/admin', adminAppRoutes);
 app.use('/', clientRoutes);
 
-const PORT = process.env.PORT || 5000;
-
-const startServer = async () => {
-  await connectDB();
-  await seedInitialData();
-
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-};
-
-startServer().catch((error) => {
-  console.error(`Failed to start server: ${error.message}`);
-  process.exit(1);
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  res.status(500).json({ msg: 'Server error', detail: error.message });
 });
+
+if (require.main === module) {
+  ensureBootstrap()
+    .then(() => {
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    })
+    .catch((error) => {
+      console.error(`Failed to start server: ${error.message}`);
+      process.exit(1);
+    });
+}
+
+module.exports = app;

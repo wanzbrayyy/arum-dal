@@ -180,6 +180,7 @@ async function initializeMemoryStore() {
     currency: 'IDR',
     enableDarkMode: true,
     enablePWA: true,
+    publicWebBaseUrl: 'https://arum-dal.vercel.app',
     receiptFooter: 'Terima kasih sudah berkunjung ke Arum Dalu.',
     bannerMessage: 'Promo kopi pagi sampai jam 11 siang',
     heroSubtitle: 'Ngopi santai, pesan dari meja.',

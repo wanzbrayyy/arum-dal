@@ -983,12 +983,17 @@ async function getAdminDashboard() {
 
 async function getAdminCatalog() {
   const store = await ensureReady();
+  const publicWebBaseUrl = store.settings.publicWebBaseUrl || 'https://arum-dal.vercel.app';
   return {
     categories: clone(store.categories),
     products: clone(store.products.map(normalizeProduct)),
     promos: clone(store.promos),
     customers: clone(store.customers),
     users: clone(store.users.map((user) => ({ ...user, password: undefined }))),
+    tables: clone(store.tables.map((table) => ({
+      ...attachTableLiveStatus(table),
+      qrUrl: `${publicWebBaseUrl.replace(/\/$/, '')}${table.qrLandingPath || `/order/${table.uniqueIdentifier}`}`,
+    }))),
     shifts: clone(store.shifts),
     reservations: clone(store.reservations),
     printers: clone(store.printers),
