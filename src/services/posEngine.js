@@ -662,7 +662,18 @@ function createNotification(type, title, message, level = 'info') {
   });
 }
 
-function reserveInventoryForOrder(items) {
+async function persistProductInventory(product) {
+  if (!hasMongoConnection() || !product?._id) return;
+  await ProductModel.findByIdAndUpdate(product._id, {
+    stock: Number(product.stock || 0),
+    soldCount: Number(product.soldCount || 0),
+    minStock: Number(product.minStock || 0),
+    available: product.available !== false,
+    updatedAt: now(),
+  }, { new: true });
+}
+
+async function reserveInventoryForOrder(items) {
   items.forEach((item) => {
     const product = findProductById(item.productId);
     if (!product) {
@@ -673,6 +684,8 @@ function reserveInventoryForOrder(items) {
     }
 
     product.stock = Number(product.stock || 0) - Number(item.quantity || 0);
+    product.soldCount = Number(product.soldCount || 0) + Number(item.quantity || 0);
+    product.available = Number(product.stock || 0) > 0;
     product.updatedAt = now();
 
     if (product.stock <= Number(product.minStock || 0)) {
@@ -684,19 +697,35 @@ function reserveInventoryForOrder(items) {
       );
     }
   });
+
+  await Promise.all(items.map(async (item) => {
+    const product = findProductById(item.productId);
+    if (product) {
+      await persistProductInventory(product);
+    }
+  }));
 }
 
-function restoreInventoryForOrder(order) {
+async function restoreInventoryForOrder(order) {
   if (!order?.inventoryReserved || order.inventoryRestoredAt) return;
 
   order.items.forEach((item) => {
     const product = findProductById(item.productId);
     if (!product) return;
     product.stock = Number(product.stock || 0) + Number(item.quantity || 0);
+    product.soldCount = Math.max(0, Number(product.soldCount || 0) - Number(item.quantity || 0));
+    product.available = Number(product.stock || 0) > 0;
     product.updatedAt = now();
   });
 
   order.inventoryRestoredAt = now();
+
+  await Promise.all((order.items || []).map(async (item) => {
+    const product = findProductById(item.productId);
+    if (product) {
+      await persistProductInventory(product);
+    }
+  }));
 }
 
 async function getClientBootstrap(uniqueIdentifier) {
@@ -880,7 +909,7 @@ async function createOrder(payload, actor = {}) {
   };
 
   if (!payload.skipInventoryAdjustment) {
-    reserveInventoryForOrder(order.items);
+    await reserveInventoryForOrder(order.items);
   }
 
   if (hasMongoConnection()) {
@@ -978,7 +1007,7 @@ async function updateOrderStatus(orderId, status, actorName, extra = {}) {
 
   if (['paid', 'cancelled', 'refunded'].includes(status)) {
     if (['cancelled', 'refunded'].includes(status)) {
-      restoreInventoryForOrder(order);
+      await restoreInventoryForOrder(order);
     }
     const table = findTableById(order.tableId);
     if (table) {
@@ -1008,15 +1037,15 @@ async function processPayment(orderId, payload, actor) {
     ? payload.methods
     : [{ method: payload.paymentMethod || 'Cash', amount: payload.amount || order.pricing.total }];
 
-  const totalPaid = methods.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const changeAmount = Math.max(0, totalPaid - order.pricing.total);
+  const incomingAmount = methods.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  if (incomingAmount <= 0) throw new Error('INVALID_PAYMENT_AMOUNT');
 
-  order.invoiceCode = order.invoiceCode || buildInvoiceCode();
-  order.paymentStatus = totalPaid >= order.pricing.total ? 'paid' : 'partial';
-  order.status = totalPaid >= order.pricing.total ? 'paid' : 'pending';
-  order.kitchenStatus = totalPaid >= order.pricing.total ? 'ready' : order.kitchenStatus;
-  order.serviceStatus = totalPaid >= order.pricing.total ? 'paid' : order.serviceStatus;
-  order.payments = methods.map((item) => ({
+  const existingPaid = Number(order.pricing?.paidAmount || 0);
+  const remainingBeforePayment = Math.max(0, Number(order.pricing.total || 0) - existingPaid);
+  const cumulativePaid = existingPaid + incomingAmount;
+  const changeAmount = Math.max(0, cumulativePaid - Number(order.pricing.total || 0));
+  const recognizedRevenue = Math.min(incomingAmount, remainingBeforePayment);
+  const appendedPayments = methods.map((item) => ({
     _id: uuidv4(),
     method: item.method,
     amount: Number(item.amount),
@@ -1024,14 +1053,21 @@ async function processPayment(orderId, payload, actor) {
     reference: item.reference || '',
     createdAt: now(),
   }));
-  order.pricing.paidAmount = totalPaid;
+
+  order.invoiceCode = order.invoiceCode || buildInvoiceCode();
+  order.paymentStatus = cumulativePaid >= Number(order.pricing.total || 0) ? 'paid' : 'partial';
+  order.status = cumulativePaid >= Number(order.pricing.total || 0) ? 'paid' : order.status;
+  order.kitchenStatus = cumulativePaid >= Number(order.pricing.total || 0) ? 'ready' : order.kitchenStatus;
+  order.serviceStatus = cumulativePaid >= Number(order.pricing.total || 0) ? 'paid' : order.serviceStatus;
+  order.payments = [...(order.payments || []), ...appendedPayments];
+  order.pricing.paidAmount = cumulativePaid;
   order.pricing.changeAmount = changeAmount;
   order.updatedAt = now();
 
   if (actor.shiftId) {
     const shift = store.shifts.find((item) => item._id === actor.shiftId);
     if (shift) {
-      shift.totalRevenue = (shift.totalRevenue || 0) + order.pricing.total;
+      shift.totalRevenue = (shift.totalRevenue || 0) + recognizedRevenue;
       shift.updatedAt = now();
     }
   }
@@ -1040,30 +1076,30 @@ async function processPayment(orderId, payload, actor) {
     _id: uuidv4(),
     orderId: order._id,
     invoiceCode: order.invoiceCode,
-    amount: order.pricing.total,
-    paidAmount: totalPaid,
+    amount: recognizedRevenue,
+    paidAmount: incomingAmount,
     changeAmount,
-    methods: clone(order.payments),
+    methods: clone(appendedPayments),
     cashierId: actor.userId,
     shiftId: actor.shiftId || null,
     createdAt: now(),
   });
 
   await updateOrderStatus(orderId, order.status, actor.name, {
-    label: totalPaid >= order.pricing.total ? 'Pembayaran berhasil' : 'Pembayaran parsial',
-    serviceStatus: totalPaid >= order.pricing.total ? 'paid' : order.serviceStatus,
+    label: cumulativePaid >= Number(order.pricing.total || 0) ? 'Pembayaran berhasil' : 'Pembayaran parsial',
+    serviceStatus: cumulativePaid >= Number(order.pricing.total || 0) ? 'paid' : order.serviceStatus,
   });
 
   if (hasMongoConnection()) {
     await TransactionModel.create({
       order: order._id,
       shift: actor.shiftId || null,
-      amount: Number(order.pricing.total || 0),
+      amount: Number(recognizedRevenue || 0),
       paymentMethod: methods[0]?.method || 'Cash',
       invoiceCode: order.invoiceCode || '',
-      paidAmount: totalPaid,
+      paidAmount: incomingAmount,
       changeAmount,
-      methods: clone(order.payments),
+      methods: clone(appendedPayments),
       cashierId: actor.userId || '',
       shiftId: actor.shiftId || '',
     });
@@ -1089,7 +1125,7 @@ async function refundOrder(orderId, payload, actor) {
   order.paymentStatus = 'refunded';
   order.status = 'refunded';
   order.updatedAt = now();
-  restoreInventoryForOrder(order);
+  await restoreInventoryForOrder(order);
   order.timeline.unshift({
     _id: uuidv4(),
     status: 'refunded',
@@ -1624,6 +1660,8 @@ async function updateAdminProduct(productId, payload, actorName) {
   await ensureReady();
   const product = getStore().products.find((item) => item._id === productId);
   if (!product) throw new Error('PRODUCT_NOT_FOUND');
+  const previousStock = Number(product.stock || 0);
+  const previousMinStock = Number(product.minStock || 5);
   Object.assign(product, payload, {
     description: payload.description !== undefined ? payload.description : product.description,
     imageUrl: payload.imageUrl || payload.imageBase64 ? normalizeImageDataUri(payload.imageUrl || payload.imageBase64, product.imageUrl || '') : product.imageUrl,
@@ -1635,6 +1673,9 @@ async function updateAdminProduct(productId, payload, actorName) {
     bestSeller: payload.bestSeller !== undefined ? !!payload.bestSeller : !!product.bestSeller,
     updatedAt: now(),
   });
+  if (payload.stock !== undefined && payload.available === undefined) {
+    product.available = Number(product.stock || 0) > 0;
+  }
   if (hasMongoConnection()) {
     await ProductModel.findByIdAndUpdate(productId, {
       name: product.name,
@@ -1649,6 +1690,30 @@ async function updateAdminProduct(productId, payload, actorName) {
       bestSeller: !!product.bestSeller,
       soldCount: Number(product.soldCount || 0),
     }, { new: true });
+  }
+  const stockDelta = Number(product.stock || 0) - previousStock;
+  if (stockDelta !== 0) {
+    createNotification(
+      'stock-adjustment',
+      `Stok ${stockDelta > 0 ? 'masuk' : 'keluar'}: ${product.name}`,
+      `${product.name} ${stockDelta > 0 ? 'bertambah' : 'berkurang'} ${Math.abs(stockDelta)}. Stok sekarang ${product.stock}.`,
+      stockDelta > 0 ? 'success' : 'warning'
+    );
+  }
+  if (Number(product.stock || 0) <= Number(product.minStock || 0)) {
+    createNotification(
+      'low-stock',
+      `Stok menipis: ${product.name}`,
+      `${product.name} tersisa ${product.stock}. Segera lakukan restock.`,
+      'warning'
+    );
+  } else if (previousStock <= previousMinStock && Number(product.stock || 0) > Number(product.minStock || 0)) {
+    createNotification(
+      'stock-restored',
+      `Stok kembali aman: ${product.name}`,
+      `${product.name} kini tersedia ${product.stock} dan sudah melewati batas minimum.`,
+      'success'
+    );
   }
   pushAuditLog('PRODUCT_UPDATED', actorName, { productId });
   return clone(product);

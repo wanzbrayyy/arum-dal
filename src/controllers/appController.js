@@ -15,7 +15,7 @@ function handleError(res, error) {
   if (error.message === 'USER_ALREADY_EXISTS') {
     return res.status(409).json({ msg: error.message });
   }
-  if (error.message === 'NOT_ENOUGH_ORDERS' || error.message === 'INSUFFICIENT_STOCK') {
+  if (error.message === 'NOT_ENOUGH_ORDERS' || error.message === 'INSUFFICIENT_STOCK' || error.message === 'INVALID_PAYMENT_AMOUNT') {
     return res.status(400).json({ msg: error.message });
   }
   console.error(error);
