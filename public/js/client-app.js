@@ -16,6 +16,7 @@
         installPrompt: null,
         estimateTimeout: null,
         cartOpen: false,
+        serviceMenuOpen: false,
     };
 
     const text = {
@@ -61,7 +62,8 @@
             'promoRow', 'memberCard', 'memberTierBadge', 'memberNameValue', 'memberPointsValue',
             'memberCodeValue', 'paymentPreference', 'paymentPreferenceLabel', 'diningOptionLabel',
             'takeawayAddress', 'refreshStatusBtn', 'shareOrderBtn', 'statusOrderCode', 'statusQueueInfo',
-            'floatingCart', 'cartSheet', 'cartBackdrop', 'cartToggleBtn', 'cartToggleSummary', 'cartCloseBtn'
+            'floatingCart', 'cartSheet', 'cartBackdrop', 'cartToggleBtn', 'cartToggleSummary', 'cartCloseBtn',
+            'serviceMenuBtn', 'openServicePanelBtn', 'serviceBackdrop', 'serviceDrawer', 'serviceCloseBtn', 'clientLoadingOverlay', 'clientLoadingText'
         ].forEach((id) => {
             els[id] = document.getElementById(id);
         });
@@ -423,8 +425,8 @@
         els.cartCount.textContent = `${cartItems.length} item`;
         els.cartMeta.textContent = cartItems.length ? currency(summary.total || 0) : t('empty');
         els.cartToggleSummary.textContent = cartItems.length
-            ? `${cartItems.length} item • ${currency(summary.total || 0)}`
-            : '0 item • Rp 0';
+            ? `${cartItems.length} item - ${currency(summary.total || 0)}`
+            : '0 item - Rp 0';
         els.checkoutBtn.disabled = cartItems.length === 0;
 
         if (!cartItems.length) {
@@ -437,6 +439,17 @@
         els.floatingCart.classList.toggle('collapsed', !state.cartOpen);
         els.cartBackdrop.classList.toggle('hidden', !state.cartOpen);
         els.cartToggleBtn.setAttribute('aria-expanded', state.cartOpen ? 'true' : 'false');
+    }
+
+    function setServiceMenuOpen(isOpen) {
+        state.serviceMenuOpen = Boolean(isOpen);
+        els.serviceDrawer.classList.toggle('hidden', !state.serviceMenuOpen);
+        els.serviceBackdrop.classList.toggle('hidden', !state.serviceMenuOpen);
+    }
+
+    function setLoading(isLoading, message = 'Sedang memuat...') {
+        els.clientLoadingOverlay.classList.toggle('hidden', !isLoading);
+        els.clientLoadingText.textContent = message;
     }
 
     async function fetchJson(url, options) {
@@ -454,24 +467,29 @@
     }
 
     async function fetchBootstrap() {
-        state.bootstrap = await fetchJson(`/api/client/bootstrap/${window.CLIENT_CONTEXT.uniqueIdentifier}`);
-        els.tableBadge.textContent = state.bootstrap.table.name;
-        els.heroTitle.textContent = state.bootstrap.settings.brandName;
-        els.heroSubtitle.textContent = state.bootstrap.settings.heroSubtitle;
-        els.miniOutlet.textContent = state.bootstrap.settings.outletName;
-        els.miniTable.textContent = state.bootstrap.table.name;
-        els.miniTax.textContent = `${state.bootstrap.settings.taxPercent}%`;
-        els.miniService.textContent = `${state.bootstrap.settings.servicePercent}%`;
-        els.searchInput.placeholder = t('search');
-        els.checkoutBtn.textContent = t('checkout');
-        renderCategories();
-        renderPromos();
-        renderRecommendations();
-        renderServiceActions();
-        renderProducts();
-        renderMemberCard();
-        scheduleEstimate();
-        renderStatusCard();
+        setLoading(true, 'Memuat menu dan meja...');
+        try {
+            state.bootstrap = await fetchJson(`/api/client/bootstrap/${window.CLIENT_CONTEXT.uniqueIdentifier}`);
+            els.tableBadge.textContent = state.bootstrap.table.name;
+            els.heroTitle.textContent = state.bootstrap.settings.brandName;
+            els.heroSubtitle.textContent = state.bootstrap.settings.heroSubtitle;
+            els.miniOutlet.textContent = state.bootstrap.settings.outletName;
+            els.miniTable.textContent = state.bootstrap.table.name;
+            els.miniTax.textContent = `${state.bootstrap.settings.taxPercent}%`;
+            els.miniService.textContent = `${state.bootstrap.settings.servicePercent}%`;
+            els.searchInput.placeholder = t('search');
+            els.checkoutBtn.textContent = t('checkout');
+            renderCategories();
+            renderPromos();
+            renderRecommendations();
+            renderServiceActions();
+            renderProducts();
+            renderMemberCard();
+            scheduleEstimate();
+            renderStatusCard();
+        } finally {
+            setLoading(false);
+        }
     }
 
     async function estimateOrder() {
@@ -584,6 +602,7 @@
         };
 
         els.checkoutBtn.disabled = true;
+        setLoading(true, 'Mengirim pesanan ke kasir...');
         try {
             const data = await fetchJson('/api/client/orders', {
                 method: 'POST',
@@ -604,6 +623,7 @@
             alert(error.message || 'Gagal membuat order');
         } finally {
             els.checkoutBtn.disabled = false;
+            setLoading(false);
         }
     }
 
@@ -621,6 +641,9 @@
             alert(`${type} berhasil dikirim.`);
         } catch (error) {
             alert(error.message || 'Panggilan gagal dikirim.');
+        } finally {
+            setLoading(false);
+            setServiceMenuOpen(false);
         }
     }
 
@@ -738,6 +761,10 @@
         els.paymentPreference.addEventListener('change', updateSelectionLabels);
         els.refreshStatusBtn.addEventListener('click', pollOrder);
         els.shareOrderBtn.addEventListener('click', shareOrder);
+        els.serviceMenuBtn.addEventListener('click', () => setServiceMenuOpen(true));
+        els.openServicePanelBtn.addEventListener('click', () => setServiceMenuOpen(true));
+        els.serviceCloseBtn.addEventListener('click', () => setServiceMenuOpen(false));
+        els.serviceBackdrop.addEventListener('click', () => setServiceMenuOpen(false));
         els.cartToggleBtn.addEventListener('click', () => setCartOpen(true));
         els.cartCloseBtn.addEventListener('click', () => setCartOpen(false));
         els.cartBackdrop.addEventListener('click', () => setCartOpen(false));
@@ -761,16 +788,25 @@
         cacheDom();
         setBodyMode();
         bindEvents();
+        setLoading(true, 'Menyiapkan halaman pelanggan...');
         updateSelectionLabels();
-        await fetchBootstrap();
-        if (state.latestOrderId) {
-            pollOrder();
-            setInterval(pollOrder, 10000);
+        try {
+            await fetchBootstrap();
+            if (state.latestOrderId) {
+                pollOrder();
+                setInterval(pollOrder, 10000);
+            }
+            renderCart();
+        } catch (error) {
+            setLoading(false);
+            alert(error.message || 'Halaman pelanggan gagal dimuat.');
         }
-        renderCart();
     }
 
     document.addEventListener('DOMContentLoaded', init);
 })();
+
+
+
 
 

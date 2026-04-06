@@ -17,13 +17,14 @@
                 <div class="topbar-meta">
                     <div>
                         <div class="brand-title">ARUM DALU</div>
-                        <div class="brand-subtitle">Digital Menu & Table Ordering</div>
+                        <div class="brand-subtitle">Digital Menu &amp; Table Ordering</div>
                     </div>
                     <div class="table-pill" id="tableBadge"><%= tableName %></div>
                 </div>
                 <div class="toolbar">
                     <button class="icon-btn" id="themeToggle" type="button"><i class="fa-solid fa-circle-half-stroke"></i></button>
                     <button class="icon-btn" id="languageToggle" type="button"><i class="fa-solid fa-language"></i></button>
+                    <button class="icon-btn" id="serviceMenuBtn" type="button"><i class="fa-solid fa-bars"></i></button>
                     <button class="soft-pill" id="installBtn" type="button">PWA</button>
                 </div>
             </div>
@@ -32,7 +33,7 @@
         <main>
             <section class="page-section">
                 <div class="hero-card">
-                    <div class="soft-pill">Scan QR â€¢ Order dari meja</div>
+                    <div class="soft-pill">Scan QR - Order dari meja</div>
                     <h1 id="heroTitle"><%= outletName %></h1>
                     <p id="heroSubtitle">Menu digital untuk pelanggan Arum Dalu.</p>
                     <div class="hero-grid">
@@ -112,18 +113,17 @@
             <section class="page-section">
                 <div class="section-heading">
                     <h2>Aksi Cepat Pelayanan</h2>
-                    <span class="muted">Terhubung ke dashboard kasir</span>
+                    <span class="muted">Sekarang lewat menu hamburger agar lebih ringkas</span>
                 </div>
-                <div class="action-grid" id="serviceActionRow">
-                    <button class="action-chip" type="button" data-type="Panggil pelayan">Panggil pelayan</button>
-                    <button class="action-chip" type="button" data-type="Minta tagihan">Minta tagihan</button>
-                    <button class="action-chip" type="button" data-type="Bersihkan meja">Bersihkan meja</button>
+                <div class="card quick-card">
+                    <div class="muted">Alert meja, panggil pelayan, dan minta tagihan kini ada di tombol menu kanan atas.</div>
+                    <button class="action-chip" id="openServicePanelBtn" type="button" style="margin-top:12px;">Buka Menu Pelayanan</button>
                 </div>
             </section>
 
             <section class="page-section">
                 <div class="section-heading">
-                    <h2>Rekomendasi & Promo</h2>
+                    <h2>Rekomendasi &amp; Promo</h2>
                     <span class="muted">Upsell otomatis dari katalog</span>
                 </div>
                 <div class="recommendation-row" id="recommendationRow"></div>
@@ -170,7 +170,7 @@
     <div class="floating-cart collapsed" id="floatingCart">
         <button class="cart-toggle-btn" id="cartToggleBtn" type="button" aria-expanded="false">
             <span>Keranjang Pelanggan</span>
-            <strong id="cartToggleSummary">0 item • Rp 0</strong>
+            <strong id="cartToggleSummary">0 item - Rp 0</strong>
         </button>
         <div class="cart-sheet" id="cartSheet">
             <div class="cart-header">
@@ -197,6 +197,23 @@
         </div>
     </div>
 
+    <div class="service-backdrop hidden" id="serviceBackdrop"></div>
+    <div class="service-drawer hidden" id="serviceDrawer">
+        <div class="section-heading">
+            <h2>Menu Alert Meja</h2>
+            <button class="icon-btn" id="serviceCloseBtn" type="button"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="muted">Pilih aksi yang ingin dikirim ke kasir dari meja pelanggan.</div>
+        <div class="action-grid" id="serviceActionRow" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="loading-overlay hidden" id="clientLoadingOverlay">
+        <div class="loading-card">
+            <div class="loading-spinner"></div>
+            <strong id="clientLoadingText">Sedang memuat...</strong>
+        </div>
+    </div>
+
     <script>
         window.CLIENT_CONTEXT = {
             uniqueIdentifier: '<%= uniqueIdentifier %>'
@@ -210,4 +227,3 @@
     <script src="/js/client-app.js"></script>
 </body>
 </html>
-
