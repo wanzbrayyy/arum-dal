@@ -220,9 +220,23 @@
 
     function renderPromos() {
         els.promoRow.innerHTML = '';
+        const settings = state.bootstrap?.settings || {};
+        if (settings.bannerMessage || settings.bannerImageUrl || settings.latestHeadline) {
+            const heroPromo = document.createElement('div');
+            heroPromo.className = 'promo-pill';
+            heroPromo.style.minWidth = '280px';
+            heroPromo.innerHTML = `
+                ${settings.bannerImageUrl ? `<div style="height:120px; border-radius:16px; background:url('${settings.bannerImageUrl}') center/cover no-repeat; margin-bottom:10px;"></div>` : ''}
+                <div class="muted">${settings.latestHeadline || 'Info terbaru dari admin'}</div>
+                <strong>${settings.bannerMessage || 'Ada update menu terbaru hari ini.'}</strong>
+            `;
+            els.promoRow.appendChild(heroPromo);
+        }
         const promos = state.bootstrap?.promos || [];
         if (!promos.length) {
-            els.promoRow.innerHTML = '<div class="promo-pill"><div class="muted">Belum ada promo aktif.</div></div>';
+            if (!els.promoRow.children.length) {
+                els.promoRow.innerHTML = '<div class="promo-pill"><div class="muted">Belum ada promo aktif.</div></div>';
+            }
             return;
         }
 
@@ -230,9 +244,10 @@
             const pill = document.createElement('div');
             pill.className = 'promo-pill';
             pill.innerHTML = `
+                ${promo.imageUrl ? `<div style="height:96px; border-radius:14px; background:url('${promo.imageUrl}') center/cover no-repeat; margin-bottom:10px;"></div>` : ''}
                 <div class="muted">${promo.code}</div>
                 <strong>${promo.title}</strong>
-                <div class="muted" style="margin-top:6px;">${promo.description || 'Promo aktif untuk meja ini.'}</div>
+                <div class="muted" style="margin-top:6px;">${promo.bannerMessage || promo.description || 'Promo aktif untuk meja ini.'}</div>
             `;
             pill.addEventListener('click', () => {
                 els.voucherCode.value = promo.code;
@@ -471,12 +486,20 @@
         try {
             state.bootstrap = await fetchJson(`/api/client/bootstrap/${window.CLIENT_CONTEXT.uniqueIdentifier}`);
             els.tableBadge.textContent = state.bootstrap.table.name;
-            els.heroTitle.textContent = state.bootstrap.settings.brandName;
-            els.heroSubtitle.textContent = state.bootstrap.settings.heroSubtitle;
+            els.heroTitle.textContent = state.bootstrap.settings.latestHeadline || state.bootstrap.settings.brandName;
+            els.heroSubtitle.textContent = state.bootstrap.settings.bannerMessage || state.bootstrap.settings.heroSubtitle;
             els.miniOutlet.textContent = state.bootstrap.settings.outletName;
             els.miniTable.textContent = state.bootstrap.table.name;
             els.miniTax.textContent = `${state.bootstrap.settings.taxPercent}%`;
             els.miniService.textContent = `${state.bootstrap.settings.servicePercent}%`;
+            const heroCard = document.querySelector('.hero-card');
+            if (heroCard) {
+                heroCard.style.backgroundImage = state.bootstrap.settings.bannerImageUrl
+                    ? `linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(31, 41, 55, 0.68)), url('${state.bootstrap.settings.bannerImageUrl}')`
+                    : '';
+                heroCard.style.backgroundSize = state.bootstrap.settings.bannerImageUrl ? 'cover' : '';
+                heroCard.style.backgroundPosition = state.bootstrap.settings.bannerImageUrl ? 'center' : '';
+            }
             els.searchInput.placeholder = t('search');
             els.checkoutBtn.textContent = t('checkout');
             renderCategories();

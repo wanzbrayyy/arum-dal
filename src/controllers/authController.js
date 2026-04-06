@@ -27,7 +27,7 @@ function signToken(user) {
 }
 
 exports.register = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
 
   try {
     if (global.useMemoryStore) {
@@ -46,7 +46,8 @@ exports.register = async (req, res) => {
         name,
         email,
         password: hashedPassword,
-        role: role || 'cashier',
+        role: 'cashier',
+        isActive: true,
         createdAt: new Date(),
       };
 
@@ -65,7 +66,8 @@ exports.register = async (req, res) => {
       name,
       email,
       password,
-      role: role || 'cashier',
+      role: 'cashier',
+      isActive: true,
     });
 
     const salt = await bcrypt.genSalt(10);
@@ -91,6 +93,9 @@ exports.login = async (req, res) => {
       if (!user) {
         return res.status(400).json({ msg: 'Invalid Credentials' });
       }
+      if (user.isActive === false) {
+        return res.status(403).json({ msg: 'ACCOUNT_DISABLED' });
+      }
 
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
@@ -104,6 +109,9 @@ exports.login = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ msg: 'Invalid Credentials' });
+    }
+    if (user.isActive === false) {
+      return res.status(403).json({ msg: 'ACCOUNT_DISABLED' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);

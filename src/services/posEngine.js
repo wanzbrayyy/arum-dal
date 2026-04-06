@@ -24,6 +24,18 @@ function endOfDay(date = new Date()) {
   return target;
 }
 
+function startOfWeek(date = new Date()) {
+  const target = startOfDay(date);
+  const day = target.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  target.setDate(target.getDate() - diff);
+  return target;
+}
+
+function startOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
 function isToday(dateValue) {
   const date = new Date(dateValue);
   return date >= startOfDay() && date <= endOfDay();
@@ -33,6 +45,66 @@ function roundToNearest(value, mode) {
   if (mode === 'nearest_100') return Math.round(value / 100) * 100;
   if (mode === 'nearest_1000') return Math.round(value / 1000) * 1000;
   return Math.round(value);
+}
+
+function normalizeImageDataUri(value, fallback = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  if (raw.startsWith('data:image/')) return raw;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `data:image/jpeg;base64,${raw}`;
+}
+
+function resolveReportStart(period = 'daily') {
+  if (period === 'monthly') return startOfMonth(new Date());
+  if (period === 'weekly') return startOfWeek(new Date());
+  return startOfDay(new Date());
+}
+
+function formatBucketLabel(date, period) {
+  const value = new Date(date);
+  if (period === 'monthly') return `${value.getDate()}/${value.getMonth() + 1}`;
+  if (period === 'weekly') return value.toLocaleDateString('id-ID', { weekday: 'short' });
+  return value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+function buildPeriodBuckets(period, referenceStart, orders) {
+  const bucketMap = new Map();
+  const bucketCount = period === 'monthly' ? 31 : period === 'weekly' ? 7 : 8;
+  for (let index = 0; index < bucketCount; index += 1) {
+    const bucketDate = new Date(referenceStart);
+    if (period === 'daily') {
+      bucketDate.setHours(referenceStart.getHours() + (index * 3), 0, 0, 0);
+    } else {
+      bucketDate.setDate(referenceStart.getDate() + index);
+    }
+    bucketMap.set(formatBucketLabel(bucketDate, period), {
+      label: formatBucketLabel(bucketDate, period),
+      orders: 0,
+      revenue: 0,
+    });
+  }
+
+  orders.forEach((order) => {
+    const createdAt = new Date(order.createdAt || now());
+    let bucketDate = new Date(createdAt);
+    if (period === 'daily') {
+      bucketDate.setMinutes(0, 0, 0);
+      const bucketHour = Math.floor(bucketDate.getHours() / 3) * 3;
+      bucketDate.setHours(bucketHour, 0, 0, 0);
+    } else {
+      bucketDate = startOfDay(createdAt);
+    }
+    const label = formatBucketLabel(bucketDate, period);
+    if (!bucketMap.has(label)) {
+      bucketMap.set(label, { label, orders: 0, revenue: 0 });
+    }
+    const bucket = bucketMap.get(label);
+    bucket.orders += 1;
+    bucket.revenue += Number(order.pricing?.total || 0);
+  });
+
+  return Array.from(bucketMap.values());
 }
 
 function getStore() {
@@ -108,16 +180,17 @@ function mapMongoProductToMemory(product, index, existing = {}) {
     sku: existing.sku || `SKU-${String(index + 1).padStart(3, '0')}`,
     barcode: existing.barcode || `${Date.now()}${index}`.slice(-12),
     name: product.name,
-    description: existing.description || '',
-    imageUrl: existing.imageUrl || '',
+    description: product.description || existing.description || '',
+    imageUrl: normalizeImageDataUri(product.imageUrl || existing.imageUrl || ''),
     category: category?.name || product.category || 'Lainnya',
     categoryId: category?._id || existing.categoryId || null,
     price: Number(product.price || 0),
     stock: Number(product.stock || 0),
-    minStock: Number(existing.minStock || 5),
-    available: existing.available !== false,
-    featured: !!existing.featured,
-    bestSeller: !!existing.bestSeller,
+    minStock: Number(product.minStock || existing.minStock || 5),
+    available: product.available !== false && existing.available !== false,
+    featured: Boolean(product.featured || existing.featured),
+    bestSeller: Boolean(product.bestSeller || existing.bestSeller),
+    soldCount: Number(product.soldCount || existing.soldCount || 0),
     tags: existing.tags || [],
     variants: existing.variants || [],
     addOns: existing.addOns || [],
@@ -474,6 +547,7 @@ function findTableByIdentifier(uniqueIdentifier) {
 function normalizeProduct(product) {
   return {
     ...product,
+    imageUrl: normalizeImageDataUri(product.imageUrl || ''),
     isLowStock: product.stock <= product.minStock,
   };
 }
@@ -1506,9 +1580,12 @@ async function createAdminProduct(payload, actorName) {
     minStock: Number(payload.minStock || 5),
     stock: Number(payload.stock || 0),
     price: Number(payload.price || 0),
+    description: payload.description || '',
+    imageUrl: normalizeImageDataUri(payload.imageUrl || payload.imageBase64 || ''),
     available: payload.available !== false,
     featured: !!payload.featured,
     bestSeller: !!payload.bestSeller,
+    soldCount: Number(payload.soldCount || 0),
     tags: payload.tags || [],
     addOns: payload.addOns || [],
     variants: payload.variants || [],
@@ -1524,9 +1601,16 @@ async function createAdminProduct(payload, actorName) {
   if (hasMongoConnection()) {
     const createdProduct = await ProductModel.create({
       name: product.name,
+      description: product.description || '',
+      imageUrl: product.imageUrl || '',
       price: Number(product.price || 0),
       category: product.category || 'Lainnya',
       stock: Number(product.stock || 0),
+      minStock: Number(product.minStock || 5),
+      available: product.available !== false,
+      featured: !!product.featured,
+      bestSeller: !!product.bestSeller,
+      soldCount: Number(product.soldCount || 0),
     });
     product._id = String(createdProduct._id);
   }
@@ -1540,17 +1624,47 @@ async function updateAdminProduct(productId, payload, actorName) {
   await ensureReady();
   const product = getStore().products.find((item) => item._id === productId);
   if (!product) throw new Error('PRODUCT_NOT_FOUND');
-  Object.assign(product, payload, { updatedAt: now() });
+  Object.assign(product, payload, {
+    description: payload.description !== undefined ? payload.description : product.description,
+    imageUrl: payload.imageUrl || payload.imageBase64 ? normalizeImageDataUri(payload.imageUrl || payload.imageBase64, product.imageUrl || '') : product.imageUrl,
+    stock: payload.stock !== undefined ? Number(payload.stock || 0) : Number(product.stock || 0),
+    minStock: payload.minStock !== undefined ? Number(payload.minStock || 5) : Number(product.minStock || 5),
+    price: payload.price !== undefined ? Number(payload.price || 0) : Number(product.price || 0),
+    available: payload.available !== undefined ? payload.available !== false : product.available !== false,
+    featured: payload.featured !== undefined ? !!payload.featured : !!product.featured,
+    bestSeller: payload.bestSeller !== undefined ? !!payload.bestSeller : !!product.bestSeller,
+    updatedAt: now(),
+  });
   if (hasMongoConnection()) {
     await ProductModel.findByIdAndUpdate(productId, {
       name: product.name,
+      description: product.description || '',
+      imageUrl: product.imageUrl || '',
       price: Number(product.price || 0),
       category: product.category || 'Lainnya',
       stock: Number(product.stock || 0),
+      minStock: Number(product.minStock || 5),
+      available: product.available !== false,
+      featured: !!product.featured,
+      bestSeller: !!product.bestSeller,
+      soldCount: Number(product.soldCount || 0),
     }, { new: true });
   }
   pushAuditLog('PRODUCT_UPDATED', actorName, { productId });
   return clone(product);
+}
+
+async function deleteAdminProduct(productId, actorName) {
+  await ensureReady();
+  const store = getStore();
+  const index = store.products.findIndex((item) => item._id === productId);
+  if (index < 0) throw new Error('PRODUCT_NOT_FOUND');
+  const [deletedProduct] = store.products.splice(index, 1);
+  if (hasMongoConnection()) {
+    await ProductModel.findByIdAndDelete(productId);
+  }
+  pushAuditLog('PRODUCT_DELETED', actorName, { productId, name: deletedProduct?.name || '' });
+  return { success: true, productId };
 }
 
 async function createAdminTable(payload, actorName) {
@@ -1601,12 +1715,15 @@ async function updateAdminTable(tableId, payload, actorName) {
 
 async function createAdminUser(payload, actorName) {
   const store = await ensureReady();
+  const existingUser = store.users.find((item) => item.email?.toLowerCase() === String(payload.email || '').toLowerCase());
+  if (existingUser) throw new Error('USER_ALREADY_EXISTS');
+  const safeRole = payload.role === 'waiter' ? 'waiter' : 'cashier';
   const user = {
     _id: uuidv4(),
     id: undefined,
     name: payload.name,
     email: payload.email,
-    role: payload.role || 'cashier',
+    role: safeRole,
     phone: payload.phone || '',
     isActive: true,
     permissions: payload.permissions || [],
@@ -1627,7 +1744,7 @@ async function createAdminUser(payload, actorName) {
       name: user.name,
       email: user.email,
       password: hashedPassword,
-      role: user.role || 'cashier',
+      role: safeRole,
       phone: user.phone || '',
       isActive: true,
       updatedAt: now(),
@@ -1642,11 +1759,29 @@ async function createAdminUser(payload, actorName) {
   return clone({ ...user, password: undefined });
 }
 
+async function updateAdminUserStatus(userId, payload, actorName) {
+  await ensureReady();
+  const store = getStore();
+  const user = store.users.find((item) => item._id === userId || item.id === userId);
+  if (!user) throw new Error('USER_NOT_FOUND');
+  user.isActive = payload.isActive !== false;
+  user.updatedAt = now();
+  if (hasMongoConnection()) {
+    await UserModel.findByIdAndUpdate(user._id, {
+      isActive: user.isActive,
+      updatedAt: now(),
+    }, { new: true });
+  }
+  pushAuditLog(user.isActive ? 'USER_ACTIVATED' : 'USER_DEACTIVATED', actorName, { userId: user._id });
+  return clone({ ...user, password: undefined });
+}
+
 async function updateAdminSettings(payload, actorName) {
   const store = await ensureReady();
   store.settings = {
     ...store.settings,
     ...payload,
+    bannerImageUrl: normalizeImageDataUri(payload.bannerImageUrl || payload.bannerImageBase64 || '', store.settings.bannerImageUrl || ''),
     colors: {
       ...store.settings.colors,
       ...(payload.colors || {}),
@@ -1663,6 +1798,8 @@ async function createAdminPromo(payload, actorName) {
     code: payload.code,
     title: payload.title,
     description: payload.description || '',
+    imageUrl: normalizeImageDataUri(payload.imageUrl || payload.imageBase64 || ''),
+    bannerMessage: payload.bannerMessage || '',
     type: payload.type || 'percentage',
     value: Number(payload.value || 0),
     minPurchase: Number(payload.minPurchase || 0),
@@ -1683,7 +1820,7 @@ async function createAdminPromo(payload, actorName) {
 
 async function getReportsOverview(period = 'daily') {
   const store = await ensureReady();
-  const referenceStart = period === 'monthly' ? new Date(new Date().getFullYear(), new Date().getMonth(), 1) : period === 'weekly' ? new Date(Date.now() - (6 * 24 * 60 * 60 * 1000)) : startOfDay();
+  const referenceStart = resolveReportStart(period);
   const filteredOrders = store.orders.filter((order) => new Date(order.createdAt) >= referenceStart);
   const paidOrders = filteredOrders.filter((order) => order.status === 'paid');
   const revenue = paidOrders.reduce((sum, order) => sum + order.pricing.total, 0);
@@ -1698,11 +1835,37 @@ async function getReportsOverview(period = 'daily') {
     }, {});
 
   const productCounter = {};
+  const productRevenueCounter = {};
   paidOrders.forEach((order) => {
     order.items.forEach((item) => {
       productCounter[item.productName] = (productCounter[item.productName] || 0) + item.quantity;
+      productRevenueCounter[item.productName] = (productRevenueCounter[item.productName] || 0) + Number(item.lineSubtotal || 0);
     });
   });
+
+  const soldProducts = Object.entries(productCounter)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, quantity]) => {
+      const inventoryProduct = store.products.find((product) => product.name === name);
+      return {
+        name,
+        quantity,
+        revenue: Number(productRevenueCounter[name] || 0),
+        stockRemaining: Number(inventoryProduct?.stock || 0),
+        minStock: Number(inventoryProduct?.minStock || 0),
+      };
+    });
+
+  const inventorySnapshot = store.products
+    .map((product) => ({
+      name: product.name,
+      category: product.category,
+      currentStock: Number(product.stock || 0),
+      minStock: Number(product.minStock || 0),
+      soldQuantity: Number(productCounter[product.name] || 0),
+      isLowStock: Number(product.stock || 0) <= Number(product.minStock || 0),
+    }))
+    .sort((a, b) => a.currentStock - b.currentStock);
 
   return {
     period,
@@ -1713,11 +1876,15 @@ async function getReportsOverview(period = 'daily') {
       refunds,
       netRevenue: revenue - refunds,
       averageTicket: paidOrders.length ? Math.round(revenue / paidOrders.length) : 0,
+      grossProfitEstimate: Math.round((revenue - refunds) * 0.62),
     },
-    topProducts: Object.entries(productCounter).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, quantity]) => ({ name, quantity })),
+    topProducts: soldProducts.slice(0, 10),
+    soldProducts,
+    inventorySnapshot,
     lowStock: clone(store.products.filter((product) => product.stock <= product.minStock)),
     shiftRanking: clone(store.shifts.map((shift) => ({ cashierName: shift.cashierName, totalRevenue: shift.totalRevenue, totalOrders: shift.totalOrders })).sort((a, b) => b.totalRevenue - a.totalRevenue)),
     paymentBreakdown: clone(paymentBreakdown),
+    timeline: buildPeriodBuckets(period, referenceStart, paidOrders),
   };
 }
 
@@ -1757,9 +1924,11 @@ module.exports = {
   createAdminCategory,
   createAdminProduct,
   updateAdminProduct,
+  deleteAdminProduct,
   createAdminTable,
   updateAdminTable,
   createAdminUser,
+  updateAdminUserStatus,
   updateAdminSettings,
   createAdminPromo,
   getReportsOverview,

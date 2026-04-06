@@ -17,9 +17,11 @@ router.get('/reports/overview', appController.getReportsOverview);
 router.post('/categories', appController.createAdminCategory);
 router.post('/products', appController.createAdminProduct);
 router.put('/products/:productId', appController.updateAdminProduct);
+router.delete('/products/:productId', appController.deleteAdminProduct);
 router.post('/tables', appController.createAdminTable);
 router.put('/tables/:tableId', appController.updateAdminTable);
 router.post('/users', appController.createAdminUser);
+router.patch('/users/:userId/status', appController.updateAdminUserStatus);
 router.put('/settings', appController.updateAdminSettings);
 router.post('/promos', appController.createAdminPromo);
 

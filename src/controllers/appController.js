@@ -12,6 +12,9 @@ function handleError(res, error) {
   if (error.message === 'TABLE_NOT_FOUND' || error.message === 'ORDER_NOT_FOUND' || error.message === 'PRODUCT_NOT_FOUND' || error.message === 'SHIFT_NOT_FOUND' || error.message === 'CALL_NOT_FOUND' || error.message === 'USER_NOT_FOUND') {
     return res.status(404).json({ msg: error.message });
   }
+  if (error.message === 'USER_ALREADY_EXISTS') {
+    return res.status(409).json({ msg: error.message });
+  }
   if (error.message === 'NOT_ENOUGH_ORDERS' || error.message === 'INSUFFICIENT_STOCK') {
     return res.status(400).json({ msg: error.message });
   }
@@ -110,8 +113,7 @@ exports.endShift = async (req, res) => {
 exports.getCurrentShift = async (req, res) => {
   try {
     const shift = await posEngine.getCurrentShift(req.user.id);
-    if (!shift) return res.status(404).json({ msg: 'SHIFT_NOT_FOUND' });
-    res.json(shift);
+    res.json(shift || null);
   } catch (error) {
     handleError(res, error);
   }
@@ -338,6 +340,14 @@ exports.updateAdminProduct = async (req, res) => {
   }
 };
 
+exports.deleteAdminProduct = async (req, res) => {
+  try {
+    res.json(await posEngine.deleteAdminProduct(req.params.productId, getActor(req).name));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 exports.createAdminTable = async (req, res) => {
   try {
     res.status(201).json(await posEngine.createAdminTable(req.body, getActor(req).name));
@@ -357,6 +367,14 @@ exports.updateAdminTable = async (req, res) => {
 exports.createAdminUser = async (req, res) => {
   try {
     res.status(201).json(await posEngine.createAdminUser(req.body, getActor(req).name));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+exports.updateAdminUserStatus = async (req, res) => {
+  try {
+    res.json(await posEngine.updateAdminUserStatus(req.params.userId, req.body, getActor(req).name));
   } catch (error) {
     handleError(res, error);
   }
