@@ -10,7 +10,7 @@ const TransactionSchema = new Schema({
   shift: {
     type: Schema.Types.ObjectId,
     ref: 'Shift',
-    required: true,
+    default: null,
   },
   amount: {
     type: Number,
@@ -20,6 +20,30 @@ const TransactionSchema = new Schema({
     type: String,
     required: true,
     enum: ['Cash', 'QRIS', 'Debit', 'Credit'],
+  },
+  invoiceCode: {
+    type: String,
+    default: '',
+  },
+  paidAmount: {
+    type: Number,
+    default: 0,
+  },
+  changeAmount: {
+    type: Number,
+    default: 0,
+  },
+  methods: {
+    type: [Schema.Types.Mixed],
+    default: [],
+  },
+  cashierId: {
+    type: String,
+    default: '',
+  },
+  shiftId: {
+    type: String,
+    default: '',
   },
 }, { timestamps: true });
 

@@ -7,17 +7,22 @@ const ShiftSchema = new Schema({
     ref: 'User',
     required: true,
   },
+  cashierName: {
+    type: String,
+    default: '',
+  },
   startTime: {
     type: Date,
     required: true,
   },
   endTime: {
     type: Date,
+    default: null,
   },
   shiftType: {
     type: String,
     enum: ['Pagi', 'Malam'],
-    required: true,
+    default: 'Pagi',
   },
   initialCash: {
     type: Number,
@@ -25,6 +30,7 @@ const ShiftSchema = new Schema({
   },
   finalCash: {
     type: Number,
+    default: 0,
   },
   totalRevenue: {
     type: Number,
@@ -33,7 +39,19 @@ const ShiftSchema = new Schema({
   totalExpense: {
     type: Number,
     default: 0
-  }
+  },
+  totalOrders: {
+    type: Number,
+    default: 0,
+  },
+  notes: {
+    type: String,
+    default: '',
+  },
+  cashLogs: {
+    type: [Schema.Types.Mixed],
+    default: [],
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Shift', ShiftSchema);

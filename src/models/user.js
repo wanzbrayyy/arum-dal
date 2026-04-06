@@ -16,10 +16,22 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'cashier'],
+    enum: ['admin', 'cashier', 'waiter'],
     default: 'cashier',
   },
+  phone: {
+    type: String,
+    default: '',
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
   createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
     type: Date,
     default: Date.now,
   },

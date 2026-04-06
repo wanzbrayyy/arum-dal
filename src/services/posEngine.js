@@ -1,4 +1,12 @@
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose');
+const TableModel = require('../models/table');
+const ProductModel = require('../models/product');
+const UserModel = require('../models/user');
+const OrderModel = require('../models/order');
+const ShiftModel = require('../models/shift');
+const TransactionModel = require('../models/transaction');
 const { memoryStore, initializeMemoryStore } = require('../store/memoryStore');
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -44,9 +52,371 @@ function ensureRuntimeCollections(store) {
   return store;
 }
 
+const mongoSyncState = {
+  lastRunAt: 0,
+};
+
+function hasMongoConnection() {
+  return mongoose.connection?.readyState === 1 && !global.useMemoryStore;
+}
+
+function createRuntimeCategory(name) {
+  return {
+    _id: uuidv4(),
+    name,
+    icon: 'circle',
+    accentColor: '#27AE60',
+    active: true,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+}
+
+function ensureCategory(name) {
+  if (!name) return null;
+  const store = getStore();
+  let category = store.categories.find((item) => item.name === name);
+  if (!category) {
+    category = createRuntimeCategory(name);
+    store.categories.push(category);
+  }
+  return category;
+}
+
+function mapMongoTableToMemory(table, existing = {}) {
+  return {
+    _id: String(table._id),
+    name: table.name,
+    area: table.area || existing.area || 'Indoor',
+    capacity: Number(table.capacity || existing.capacity || 4),
+    status: table.status || existing.status || 'available',
+    activeOrderIds: existing.activeOrderIds || [],
+    currentCustomerName: existing.currentCustomerName || '',
+    currentReservationId: existing.currentReservationId || null,
+    uniqueIdentifier: table.uniqueIdentifier,
+    estimatedDurationMinutes: existing.estimatedDurationMinutes || 90,
+    qrLandingPath: `/order/${table.uniqueIdentifier}`,
+    createdAt: table.createdAt || existing.createdAt || now(),
+    updatedAt: table.updatedAt || now(),
+  };
+}
+
+function mapMongoProductToMemory(product, index, existing = {}) {
+  const category = ensureCategory(product.category || existing.category || 'Lainnya');
+  return {
+    _id: String(product._id),
+    sku: existing.sku || `SKU-${String(index + 1).padStart(3, '0')}`,
+    barcode: existing.barcode || `${Date.now()}${index}`.slice(-12),
+    name: product.name,
+    description: existing.description || '',
+    imageUrl: existing.imageUrl || '',
+    category: category?.name || product.category || 'Lainnya',
+    categoryId: category?._id || existing.categoryId || null,
+    price: Number(product.price || 0),
+    stock: Number(product.stock || 0),
+    minStock: Number(existing.minStock || 5),
+    available: existing.available !== false,
+    featured: !!existing.featured,
+    bestSeller: !!existing.bestSeller,
+    tags: existing.tags || [],
+    variants: existing.variants || [],
+    addOns: existing.addOns || [],
+    sweetnessLevels: existing.sweetnessLevels || ['Normal'],
+    iceLevels: existing.iceLevels || ['Normal'],
+    spiceLevels: existing.spiceLevels || ['Normal'],
+    allergens: existing.allergens || [],
+    bundleSuggestions: existing.bundleSuggestions || [],
+    schedule: existing.schedule || { availableAllDay: true, start: '00:00', end: '23:59' },
+    createdAt: product.createdAt || existing.createdAt || now(),
+    updatedAt: product.updatedAt || now(),
+  };
+}
+
+function mapMongoUserToMemory(user, existing = {}) {
+  return {
+    _id: String(user._id),
+    id: String(user._id),
+    name: user.name,
+    email: user.email,
+    password: user.password,
+    role: user.role || existing.role || 'cashier',
+    phone: user.phone || existing.phone || '',
+    isActive: user.isActive !== false,
+    permissions: existing.permissions || [],
+    favoriteProductIds: existing.favoriteProductIds || [],
+    performance: existing.performance || {
+      targetSales: 0,
+      ordersHandled: 0,
+      avgCheckoutSeconds: 0,
+    },
+    createdAt: user.createdAt || existing.createdAt || now(),
+    updatedAt: user.updatedAt || now(),
+  };
+}
+
+function mapMongoShiftToMemory(shift, existing = {}) {
+  const cashierName = shift.cashierName || shift.cashier?.name || existing.cashierName || findUserById(String(shift.cashier))?.name || 'Cashier';
+  return {
+    _id: String(shift._id),
+    cashierId: String(shift.cashier?._id || shift.cashier || existing.cashierId || ''),
+    cashierName,
+    startTime: shift.startTime || existing.startTime || now(),
+    endTime: shift.endTime || null,
+    shiftType: shift.shiftType || existing.shiftType || 'Pagi',
+    initialCash: Number(shift.initialCash || 0),
+    finalCash: Number(shift.finalCash || 0),
+    totalRevenue: Number(shift.totalRevenue || 0),
+    totalExpense: Number(shift.totalExpense || 0),
+    totalOrders: Number(shift.totalOrders || 0),
+    notes: shift.notes || existing.notes || '',
+    cashLogs: shift.cashLogs || existing.cashLogs || [],
+    createdAt: shift.createdAt || existing.createdAt || now(),
+    updatedAt: shift.updatedAt || now(),
+  };
+}
+
+function mapMongoOrderToMemory(order, existing = {}) {
+  const fallbackModifiers = {
+    variants: [],
+    addOns: [],
+    sweetness: 'Normal',
+    ice: 'Normal',
+    spice: 'Normal',
+  };
+  const normalizedItems = (order.items || []).map((item) => {
+    const productId = String(item.productId || item.product || '');
+    const knownProduct = findProductById(productId);
+    const unitPrice = Number(item.unitPrice || item.priceAtOrder || 0);
+    const modifierPrice = Number(item.modifierPrice || 0);
+    const itemDiscount = Number(item.itemDiscount || 0);
+    const quantity = Number(item.quantity || 1);
+    return {
+      _id: String(item._id || uuidv4()),
+      productId,
+      productName: item.productName || knownProduct?.name || 'Produk',
+      category: knownProduct?.category || '',
+      quantity,
+      unitPrice,
+      modifierPrice,
+      itemDiscount,
+      note: item.note || '',
+      modifiers: item.modifiers || fallbackModifiers,
+      lineSubtotal: Number(item.lineSubtotal || ((unitPrice + modifierPrice) * quantity) - itemDiscount),
+    };
+  });
+
+  const subtotal = normalizedItems.reduce((sum, item) => sum + Number(item.lineSubtotal || 0), 0);
+  const pricing = order.pricing || {
+    subtotal,
+    promoDiscount: 0,
+    memberDiscount: 0,
+    serviceCharge: 0,
+    tax: 0,
+    roundingAdjustment: 0,
+    total: Number(order.totalAmount || subtotal),
+    paidAmount: (order.payments || []).reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    changeAmount: 0,
+  };
+
+  return {
+    _id: String(order._id),
+    orderCode: order.orderCode || existing.orderCode || `ORD-${String(order.queueNumber || 0).padStart(4, '0')}`,
+    invoiceCode: order.invoiceCode || existing.invoiceCode || null,
+    source: order.source || existing.source || 'cashier',
+    channel: order.channel || existing.channel || 'cashier',
+    tableId: String(order.table?._id || order.table || existing.tableId || ''),
+    tableName: order.tableName || order.table?.name || existing.tableName || findTableById(String(order.table || existing.tableId || ''))?.name || '-',
+    orderType: order.orderType || existing.orderType || 'dine-in',
+    diningOption: order.diningOption || existing.diningOption || 'dine-in',
+    customerName: order.customerName || existing.customerName || 'Customer',
+    customerPhone: order.customerPhone || existing.customerPhone || '',
+    customerWhatsapp: order.customerWhatsapp || order.customerPhone || existing.customerWhatsapp || '',
+    customerEmail: order.customerEmail || existing.customerEmail || '',
+    customerId: order.customerId || existing.customerId || null,
+    memberTier: order.memberTier || existing.memberTier || null,
+    voucherCode: order.voucherCode || existing.voucherCode || '',
+    appliedPromo: order.appliedPromo || existing.appliedPromo || null,
+    status: order.status || existing.status || 'pending',
+    kitchenStatus: order.kitchenStatus || existing.kitchenStatus || 'queued',
+    serviceStatus: order.serviceStatus || existing.serviceStatus || 'waiting',
+    paymentStatus: order.paymentStatus || existing.paymentStatus || (order.status === 'paid' ? 'paid' : 'unpaid'),
+    paymentPreference: order.paymentPreference || existing.paymentPreference || 'pay_at_cashier',
+    note: order.note || existing.note || '',
+    customerRequest: order.customerRequest || existing.customerRequest || '',
+    assignedWaiterId: order.assignedWaiterId || existing.assignedWaiterId || null,
+    cashierId: order.cashierId || existing.cashierId || null,
+    shiftId: order.shiftId || String(order.shift || existing.shiftId || ''),
+    splitSourceOrderId: order.splitSourceOrderId || existing.splitSourceOrderId || null,
+    mergedOrderIds: order.mergedOrderIds || existing.mergedOrderIds || [],
+    paymentSplitCode: order.paymentSplitCode || existing.paymentSplitCode || uuidv4(),
+    queueNumber: Number(order.queueNumber || existing.queueNumber || 0),
+    items: normalizedItems,
+    pricing: {
+      ...pricing,
+      total: Number(pricing.total || order.totalAmount || subtotal),
+      paidAmount: Number(pricing.paidAmount || 0),
+      changeAmount: Number(pricing.changeAmount || 0),
+    },
+    payments: order.payments || existing.payments || [],
+    refundHistory: order.refundHistory || existing.refundHistory || [],
+    inventoryReserved: order.inventoryReserved !== undefined ? !!order.inventoryReserved : existing.inventoryReserved !== false,
+    inventoryRestoredAt: order.inventoryRestoredAt || existing.inventoryRestoredAt || null,
+    timeline: order.timeline || existing.timeline || [],
+    createdAt: order.createdAt || existing.createdAt || now(),
+    updatedAt: order.updatedAt || now(),
+  };
+}
+
+function buildMongoOrderPayload(order) {
+  return {
+    orderCode: order.orderCode || '',
+    invoiceCode: order.invoiceCode || '',
+    source: order.source || 'cashier',
+    channel: order.channel || 'cashier',
+    table: order.tableId,
+    tableName: order.tableName || '',
+    shift: order.shiftId || null,
+    customerName: order.customerName || 'Customer',
+    customerPhone: order.customerPhone || '',
+    customerWhatsapp: order.customerWhatsapp || '',
+    customerEmail: order.customerEmail || '',
+    customerId: order.customerId || '',
+    memberTier: order.memberTier || '',
+    voucherCode: order.voucherCode || '',
+    appliedPromo: order.appliedPromo || null,
+    orderType: order.orderType || 'dine-in',
+    diningOption: order.diningOption || 'dine-in',
+    items: (order.items || []).map((item) => ({
+      product: item.productId || null,
+      productId: item.productId || '',
+      productName: item.productName || '',
+      quantity: Number(item.quantity || 1),
+      priceAtOrder: Number(item.unitPrice || 0),
+      unitPrice: Number(item.unitPrice || 0),
+      modifierPrice: Number(item.modifierPrice || 0),
+      itemDiscount: Number(item.itemDiscount || 0),
+      note: item.note || '',
+      modifiers: item.modifiers || {},
+      lineSubtotal: Number(item.lineSubtotal || 0),
+    })),
+    totalAmount: Number(order.pricing?.total || order.totalAmount || 0),
+    status: order.status || 'pending',
+    kitchenStatus: order.kitchenStatus || 'queued',
+    serviceStatus: order.serviceStatus || 'waiting',
+    paymentStatus: order.paymentStatus || 'unpaid',
+    paymentPreference: order.paymentPreference || 'pay_at_cashier',
+    paymentMethod: order.payments?.[0]?.method || null,
+    note: order.note || '',
+    customerRequest: order.customerRequest || '',
+    assignedWaiterId: order.assignedWaiterId || '',
+    cashierId: order.cashierId || '',
+    shiftId: order.shiftId || '',
+    splitSourceOrderId: order.splitSourceOrderId || '',
+    mergedOrderIds: order.mergedOrderIds || [],
+    paymentSplitCode: order.paymentSplitCode || '',
+    queueNumber: Number(order.queueNumber || 0),
+    pricing: order.pricing || {},
+    payments: order.payments || [],
+    refundHistory: order.refundHistory || [],
+    inventoryReserved: order.inventoryReserved !== false,
+    inventoryRestoredAt: order.inventoryRestoredAt || null,
+    timeline: order.timeline || [],
+  };
+}
+
+function buildMongoShiftPayload(shift) {
+  return {
+    cashier: shift.cashierId,
+    cashierName: shift.cashierName || 'Cashier',
+    startTime: shift.startTime || now(),
+    endTime: shift.endTime || null,
+    shiftType: shift.shiftType || 'Pagi',
+    initialCash: Number(shift.initialCash || 0),
+    finalCash: Number(shift.finalCash || 0),
+    totalRevenue: Number(shift.totalRevenue || 0),
+    totalExpense: Number(shift.totalExpense || 0),
+    totalOrders: Number(shift.totalOrders || 0),
+    notes: shift.notes || '',
+    cashLogs: shift.cashLogs || [],
+  };
+}
+
+async function syncStoreWithMongo(force = false) {
+  const store = getStore();
+  if (!hasMongoConnection()) return store;
+
+  const nowMs = Date.now();
+  if (!force && nowMs - mongoSyncState.lastRunAt < 5000) return store;
+
+  const [tables, products, users, shifts, orders, transactions] = await Promise.all([
+    TableModel.find().lean(),
+    ProductModel.find().lean(),
+    UserModel.find().lean(),
+    ShiftModel.find().populate('cashier', 'name').sort({ createdAt: -1 }).lean(),
+    OrderModel.find().populate('table', 'name').sort({ createdAt: -1 }).lean(),
+    TransactionModel.find().sort({ createdAt: -1 }).lean(),
+  ]);
+
+  if (tables.length) {
+    store.tables = tables.map((table) => {
+      const existing = store.tables.find((item) => item.uniqueIdentifier === table.uniqueIdentifier || item.name === table.name || String(item._id) === String(table._id));
+      return mapMongoTableToMemory(table, existing);
+    });
+  }
+
+  if (products.length) {
+    store.products = products.map((product, index) => {
+      const existing = store.products.find((item) => item.name === product.name || String(item._id) === String(product._id));
+      return mapMongoProductToMemory(product, index, existing);
+    });
+  }
+
+  if (users.length) {
+    store.users = users.map((user) => {
+      const existing = store.users.find((item) => item.email === user.email || String(item._id) === String(user._id));
+      return mapMongoUserToMemory(user, existing);
+    });
+  }
+
+  if (shifts.length) {
+    store.shifts = shifts.map((shift) => {
+      const existing = store.shifts.find((item) => String(item._id) === String(shift._id));
+      return mapMongoShiftToMemory(shift, existing);
+    });
+  }
+
+  if (orders.length) {
+    store.orders = orders.map((order) => {
+      const existing = store.orders.find((item) => String(item._id) === String(order._id));
+      return mapMongoOrderToMemory(order, existing);
+    });
+  }
+
+  if (transactions.length) {
+    store.transactions = transactions.map((transaction) => ({
+      _id: String(transaction._id),
+      orderId: String(transaction.order || ''),
+      invoiceCode: transaction.invoiceCode || '',
+      amount: Number(transaction.amount || 0),
+      paidAmount: Number(transaction.paidAmount || transaction.amount || 0),
+      changeAmount: Number(transaction.changeAmount || 0),
+      methods: transaction.methods?.length ? transaction.methods : [{ method: transaction.paymentMethod, amount: Number(transaction.amount || 0) }],
+      cashierId: transaction.cashierId || '',
+      shiftId: transaction.shiftId || String(transaction.shift || ''),
+      createdAt: transaction.createdAt || now(),
+    }));
+  }
+
+  store.sequences.order = Math.max(store.sequences.order || 1, store.orders.length + 1);
+  store.sequences.invoice = Math.max(store.sequences.invoice || 1, store.transactions.length + 1);
+  mongoSyncState.lastRunAt = nowMs;
+  return store;
+}
+
 async function ensureReady() {
   const store = await initializeMemoryStore();
   ensureRuntimeCollections(store);
+  await syncStoreWithMongo();
   return store;
 }
 
@@ -257,7 +627,11 @@ function restoreInventoryForOrder(order) {
 
 async function getClientBootstrap(uniqueIdentifier) {
   const store = await ensureReady();
-  const table = findTableByIdentifier(uniqueIdentifier);
+  let table = findTableByIdentifier(uniqueIdentifier);
+  if (!table && hasMongoConnection()) {
+    await syncStoreWithMongo(true);
+    table = findTableByIdentifier(uniqueIdentifier);
+  }
   if (!table) throw new Error('TABLE_NOT_FOUND');
 
   return {
@@ -273,6 +647,18 @@ async function getClientBootstrap(uniqueIdentifier) {
       },
     ],
     products: clone(store.products.map(normalizeProduct)),
+  };
+}
+
+async function getClientLanding() {
+  const store = await ensureReady();
+  return {
+    outletName: store.settings.outletName || store.settings.brandName || 'Arum Dalu',
+    tables: clone((store.tables || []).map((table) => ({
+      _id: table._id,
+      name: table.name,
+      uniqueIdentifier: table.uniqueIdentifier,
+    }))),
   };
 }
 
@@ -423,6 +809,11 @@ async function createOrder(payload, actor = {}) {
     reserveInventoryForOrder(order.items);
   }
 
+  if (hasMongoConnection()) {
+    const createdOrder = await OrderModel.create(buildMongoOrderPayload(order));
+    order._id = String(createdOrder._id);
+  }
+
   store.orders.unshift(order);
   table.activeOrderIds = Array.from(new Set([...(table.activeOrderIds || []), order._id]));
   table.status = 'occupied';
@@ -433,6 +824,10 @@ async function createOrder(payload, actor = {}) {
     orderId: order._id,
     tableId: table._id,
   });
+
+  if (hasMongoConnection()) {
+    await OrderModel.findByIdAndUpdate(order._id, buildMongoOrderPayload(order), { new: true });
+  }
 
   return clone(order);
 }
@@ -523,6 +918,9 @@ async function updateOrderStatus(orderId, status, actorName, extra = {}) {
   }
 
   pushAuditLog('ORDER_STATUS_UPDATED', actorName, { orderId, status });
+  if (hasMongoConnection()) {
+    await OrderModel.findByIdAndUpdate(order._id, buildMongoOrderPayload(order), { new: true });
+  }
   return clone(order);
 }
 
@@ -581,6 +979,21 @@ async function processPayment(orderId, payload, actor) {
     label: totalPaid >= order.pricing.total ? 'Pembayaran berhasil' : 'Pembayaran parsial',
     serviceStatus: totalPaid >= order.pricing.total ? 'paid' : order.serviceStatus,
   });
+
+  if (hasMongoConnection()) {
+    await TransactionModel.create({
+      order: order._id,
+      shift: actor.shiftId || null,
+      amount: Number(order.pricing.total || 0),
+      paymentMethod: methods[0]?.method || 'Cash',
+      invoiceCode: order.invoiceCode || '',
+      paidAmount: totalPaid,
+      changeAmount,
+      methods: clone(order.payments),
+      cashierId: actor.userId || '',
+      shiftId: actor.shiftId || '',
+    });
+  }
 
   return clone(order);
 }
@@ -773,6 +1186,7 @@ async function startShift(userId, initialCash, actorName) {
     cashierName: findUserById(userId)?.name || actorName || 'Cashier',
     startTime: now(),
     endTime: null,
+    shiftType: 'Pagi',
     initialCash: Number(initialCash || 0),
     finalCash: 0,
     totalRevenue: 0,
@@ -783,6 +1197,11 @@ async function startShift(userId, initialCash, actorName) {
     createdAt: now(),
     updatedAt: now(),
   };
+
+  if (hasMongoConnection()) {
+    const createdShift = await ShiftModel.create(buildMongoShiftPayload(shift));
+    shift._id = String(createdShift._id);
+  }
 
   store.shifts.unshift(shift);
   pushAuditLog('SHIFT_STARTED', actorName || shift.cashierName, { shiftId: shift._id });
@@ -814,6 +1233,9 @@ async function endShift(userId, actorName) {
   shift.updatedAt = now();
 
   pushAuditLog('SHIFT_ENDED', actorName || shift.cashierName, { shiftId: shift._id });
+  if (hasMongoConnection()) {
+    await ShiftModel.findByIdAndUpdate(shift._id, buildMongoShiftPayload(shift), { new: true });
+  }
   return clone(shift);
 }
 
@@ -1099,6 +1521,16 @@ async function createAdminProduct(payload, actorName) {
     createdAt: now(),
     updatedAt: now(),
   };
+  if (hasMongoConnection()) {
+    const createdProduct = await ProductModel.create({
+      name: product.name,
+      price: Number(product.price || 0),
+      category: product.category || 'Lainnya',
+      stock: Number(product.stock || 0),
+    });
+    product._id = String(createdProduct._id);
+  }
+
   store.products.unshift(product);
   pushAuditLog('PRODUCT_CREATED', actorName, { productId: product._id });
   return clone(product);
@@ -1109,6 +1541,14 @@ async function updateAdminProduct(productId, payload, actorName) {
   const product = getStore().products.find((item) => item._id === productId);
   if (!product) throw new Error('PRODUCT_NOT_FOUND');
   Object.assign(product, payload, { updatedAt: now() });
+  if (hasMongoConnection()) {
+    await ProductModel.findByIdAndUpdate(productId, {
+      name: product.name,
+      price: Number(product.price || 0),
+      category: product.category || 'Lainnya',
+      stock: Number(product.stock || 0),
+    }, { new: true });
+  }
   pushAuditLog('PRODUCT_UPDATED', actorName, { productId });
   return clone(product);
 }
@@ -1126,6 +1566,16 @@ async function createAdminTable(payload, actorName) {
     updatedAt: now(),
   };
   table.qrLandingPath = `/order/${table.uniqueIdentifier}`;
+  if (hasMongoConnection()) {
+    const createdTable = await TableModel.create({
+      name: table.name,
+      uniqueIdentifier: table.uniqueIdentifier,
+      area: table.area || 'Indoor',
+      capacity: Number(table.capacity || 4),
+      status: table.status || 'available',
+    });
+    table._id = String(createdTable._id);
+  }
   store.tables.push(table);
   pushAuditLog('TABLE_CREATED', actorName, { tableId: table._id });
   return clone(table);
@@ -1136,6 +1586,15 @@ async function updateAdminTable(tableId, payload, actorName) {
   const table = getStore().tables.find((item) => item._id === tableId);
   if (!table) throw new Error('TABLE_NOT_FOUND');
   Object.assign(table, payload, { updatedAt: now() });
+  if (hasMongoConnection()) {
+    await TableModel.findByIdAndUpdate(tableId, {
+      name: table.name,
+      uniqueIdentifier: table.uniqueIdentifier,
+      area: table.area || 'Indoor',
+      capacity: Number(table.capacity || 4),
+      status: table.status || 'available',
+    }, { new: true });
+  }
   pushAuditLog('TABLE_UPDATED', actorName, { tableId });
   return clone(table);
 }
@@ -1161,6 +1620,22 @@ async function createAdminUser(payload, actorName) {
     createdAt: now(),
     updatedAt: now(),
   };
+  if (hasMongoConnection()) {
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(user.password, salt);
+    const createdUser = await UserModel.create({
+      name: user.name,
+      email: user.email,
+      password: hashedPassword,
+      role: user.role || 'cashier',
+      phone: user.phone || '',
+      isActive: true,
+      updatedAt: now(),
+    });
+    user._id = String(createdUser._id);
+    user.password = createdUser.password;
+  }
+
   user.id = user._id;
   store.users.push(user);
   pushAuditLog('USER_CREATED', actorName, { userId: user._id });
@@ -1248,6 +1723,7 @@ async function getReportsOverview(period = 'daily') {
 
 module.exports = {
   ensureReady,
+  getClientLanding,
   getClientBootstrap,
   estimatePricing,
   findOrCreateCustomer,
@@ -1288,3 +1764,5 @@ module.exports = {
   createAdminPromo,
   getReportsOverview,
 };
+
+
