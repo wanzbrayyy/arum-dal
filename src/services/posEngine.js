@@ -317,6 +317,10 @@ async function findOrCreateCustomer(payload) {
       updatedAt: now(),
     };
     store.customers.push(customer);
+  } else {
+    if (payload.name?.trim()) customer.name = payload.name.trim();
+    if (payload.email?.trim()) customer.email = payload.email.trim();
+    customer.updatedAt = now();
   }
 
   return clone(customer);
@@ -332,8 +336,13 @@ async function createOrder(payload, actor = {}) {
   const table = findTableById(payload.tableId);
   if (!table) throw new Error('TABLE_NOT_FOUND');
 
-  const customer = payload.customerPhone
-    ? await findOrCreateCustomer({ name: payload.customerName, phone: payload.customerPhone })
+  const customerPhone = payload.customerPhone || payload.customerWhatsapp || '';
+  const customer = customerPhone
+    ? await findOrCreateCustomer({
+        name: payload.customerName,
+        phone: customerPhone,
+        email: payload.customerEmail,
+      })
     : null;
 
   const pricing = calculateOrderPricing({
@@ -356,14 +365,24 @@ async function createOrder(payload, actor = {}) {
     orderType: payload.orderType || 'dine-in',
     diningOption: payload.diningOption || 'dine-in',
     customerName: payload.customerName || customer?.name || 'Customer',
-    customerPhone: payload.customerPhone || customer?.phone || '',
+    customerPhone: customerPhone || customer?.phone || '',
+    customerWhatsapp: payload.customerWhatsapp || customerPhone || customer?.phone || '',
+    customerEmail: payload.customerEmail || customer?.email || '',
     customerId: customer?._id || null,
     memberTier: customer?.tier || null,
     voucherCode: payload.voucherCode || '',
     appliedPromo: pricing.appliedPromo,
     status,
-    kitchenStatus: status === 'hold' ? 'hold' : 'queued',
-    serviceStatus: 'waiting',
+    kitchenStatus: status === 'hold'
+      ? 'hold'
+      : status === 'accepted'
+        ? 'accepted'
+        : status === 'preparing'
+          ? 'preparing'
+          : status === 'ready'
+            ? 'ready'
+            : 'queued',
+    serviceStatus: status === 'served' ? 'served' : status === 'accepted' ? 'accepted' : 'waiting',
     paymentStatus: 'unpaid',
     paymentPreference: payload.paymentPreference || 'pay_at_cashier',
     note: payload.note || '',
@@ -444,9 +463,41 @@ async function updateOrderStatus(orderId, status, actorName, extra = {}) {
   const order = store.orders.find((item) => item._id === orderId);
   if (!order) throw new Error('ORDER_NOT_FOUND');
 
+  const derivedKitchenStatus = extra.kitchenStatus || (
+    status === 'hold'
+      ? 'hold'
+      : status === 'accepted'
+        ? 'accepted'
+        : status === 'preparing'
+          ? 'preparing'
+          : status === 'ready'
+            ? 'ready'
+            : ['served', 'paid'].includes(status)
+              ? 'done'
+              : ['cancelled', 'refunded'].includes(status)
+                ? 'cancelled'
+                : order.kitchenStatus
+  );
+
+  const derivedServiceStatus = extra.serviceStatus || (
+    status === 'accepted'
+      ? 'accepted'
+      : status === 'preparing'
+        ? 'preparing'
+        : status === 'ready'
+          ? 'ready'
+          : status === 'served'
+            ? 'served'
+            : status === 'paid'
+              ? 'paid'
+              : ['cancelled', 'refunded'].includes(status)
+                ? status
+                : order.serviceStatus
+  );
+
   order.status = status;
-  order.kitchenStatus = extra.kitchenStatus || order.kitchenStatus;
-  order.serviceStatus = extra.serviceStatus || order.serviceStatus;
+  order.kitchenStatus = derivedKitchenStatus;
+  order.serviceStatus = derivedServiceStatus;
   order.updatedAt = now();
   order.timeline.unshift({
     _id: uuidv4(),
@@ -885,7 +936,7 @@ async function getCashierDashboard(userId) {
   const store = await ensureReady();
   const currentShift = store.shifts.find((shift) => shift.cashierId === userId && !shift.endTime) || null;
   const todayOrders = store.orders.filter((order) => isToday(order.createdAt));
-  const activeOrders = todayOrders.filter((order) => ['pending', 'preparing', 'ready', 'served', 'hold'].includes(order.status));
+  const activeOrders = todayOrders.filter((order) => ['pending', 'accepted', 'preparing', 'ready', 'served', 'hold'].includes(order.status));
   const heldOrders = activeOrders.filter((order) => order.status === 'hold');
   const recentOrders = todayOrders.slice(0, 10);
   const lowStock = store.products.filter((product) => product.stock <= product.minStock);

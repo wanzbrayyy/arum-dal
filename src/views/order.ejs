@@ -59,7 +59,7 @@
             <section class="page-section">
                 <div class="section-heading">
                     <h2>Identitas Pemesan</h2>
-                    <span class="muted">Opsional, tapi membantu kasir</span>
+                    <span class="muted">Nama dan WhatsApp wajib agar order lengkap</span>
                 </div>
                 <div class="info-grid">
                     <input class="field" id="customerName" placeholder="Nama pelanggan">
@@ -166,14 +166,22 @@
         </main>
     </div>
 
-    <div class="floating-cart">
-        <div class="cart-sheet">
+    <div class="cart-backdrop hidden" id="cartBackdrop"></div>
+    <div class="floating-cart collapsed" id="floatingCart">
+        <button class="cart-toggle-btn" id="cartToggleBtn" type="button" aria-expanded="false">
+            <span>Keranjang Pelanggan</span>
+            <strong id="cartToggleSummary">0 item • Rp 0</strong>
+        </button>
+        <div class="cart-sheet" id="cartSheet">
             <div class="cart-header">
                 <div>
                     <div style="font-weight:700;">Keranjang</div>
                     <div class="muted" id="cartMeta">Belum ada item di keranjang.</div>
                 </div>
-                <div class="soft-pill" id="cartCount">0 item</div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <div class="soft-pill" id="cartCount">0 item</div>
+                    <button class="icon-btn" id="cartCloseBtn" type="button" aria-label="Tutup keranjang"><i class="fa-solid fa-xmark"></i></button>
+                </div>
             </div>
             <div class="empty-state" id="cartEmpty">Belum ada item di keranjang.</div>
             <div id="cartLines"></div>
@@ -202,3 +210,4 @@
     <script src="/js/client-app.js"></script>
 </body>
 </html>
+

@@ -18,7 +18,7 @@ const cashierAppRoutes = require('./src/routes/cashierAppRoutes');
 const adminAppRoutes = require('./src/routes/adminAppRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 let bootstrapPromise;
 

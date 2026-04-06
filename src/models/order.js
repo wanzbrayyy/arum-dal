@@ -15,6 +15,18 @@ const OrderSchema = new Schema({
     type: String,
     default: 'Customer',
   },
+  customerPhone: {
+    type: String,
+    default: '',
+  },
+  customerWhatsapp: {
+    type: String,
+    default: '',
+  },
+  customerEmail: {
+    type: String,
+    default: '',
+  },
   items: [{
     product: {
       type: Schema.Types.ObjectId,
@@ -37,7 +49,7 @@ const OrderSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'paid', 'cancelled', 'hold'],
+    enum: ['pending', 'accepted', 'preparing', 'ready', 'served', 'paid', 'cancelled', 'hold'],
     default: 'pending',
   },
   paymentMethod: {

@@ -40,7 +40,7 @@ body.light-mode {
     max-width: 520px;
     margin: 0 auto;
     min-height: 100vh;
-    padding-bottom: 140px;
+    padding-bottom: 120px;
 }
 
 .topbar {
@@ -363,6 +363,14 @@ body.light-mode .topbar {
     font-weight: 700;
 }
 
+.cart-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 12, 16, 0.46);
+    backdrop-filter: blur(4px);
+    z-index: 29;
+}
+
 .floating-cart {
     position: fixed;
     left: 50%;
@@ -371,6 +379,30 @@ body.light-mode .topbar {
     width: calc(100% - 24px);
     max-width: 496px;
     z-index: 30;
+}
+
+.floating-cart.collapsed .cart-sheet {
+    display: none;
+}
+
+.floating-cart:not(.collapsed) .cart-toggle-btn {
+    display: none;
+}
+
+.cart-toggle-btn {
+    width: 100%;
+    padding: 15px 18px;
+    border: 1px solid rgba(243, 156, 18, 0.28);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(243, 156, 18, 0.95), rgba(241, 196, 15, 0.92));
+    color: #13212f;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font: inherit;
+    font-weight: 700;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
 }
 
 .cart-sheet {
@@ -450,3 +482,4 @@ body.light-mode .topbar {
         grid-template-columns: 1fr;
     }
 }
+
