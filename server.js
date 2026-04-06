@@ -19,6 +19,7 @@ const adminAppRoutes = require('./src/routes/adminAppRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const BODY_LIMIT = process.env.BODY_LIMIT || '15mb';
 
 let bootstrapPromise;
 
@@ -33,8 +34,8 @@ function ensureBootstrap() {
 }
 
 app.use(cors());
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'src', 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -62,6 +63,12 @@ app.use('/', clientRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({
+      msg: 'PAYLOAD_TOO_LARGE',
+      detail: `Ukuran upload melebihi batas server (${BODY_LIMIT}). Kompres gambar lalu coba lagi.`,
+    });
+  }
   res.status(500).json({ msg: 'Server error', detail: error.message });
 });
 
